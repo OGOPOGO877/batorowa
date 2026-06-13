@@ -1,0 +1,26 @@
+{
+  "armor": {
+    "name": "アーマー",
+    "type": "armor",
+    "damageReduction": 0.3,
+    "description": "被ダメージ軽減"
+  },
+  "helmet": {
+    "name": "ヘルメット",
+    "type": "helmet",
+    "headProtection": true,
+    "description": "頭部ダメージ無効化（簡易）"
+  },
+  "goggles": {
+    "name": "ゴーグル",
+    "type": "goggles",
+    "visionMultiplier": 1.4,
+    "description": "視界距離増加"
+  },
+  "headset": {
+    "name": "ヘッドセット",
+    "type": "headset",
+    "hearingMultiplier": 1.5,
+    "description": "可聴範囲増加"
+  }
+}

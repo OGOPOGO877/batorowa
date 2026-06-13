@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>batorowa - テスト/練習版</title>
+  <style>
+    body {
+      margin: 0;
+      background: #0a0f1a;
+      color: #ddd;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 860px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    h1 {
+      color: #0f0;
+      font-size: 2.4rem;
+      margin-bottom: 8px;
+      text-shadow: 0 0 10px #003300;
+    }
+    .subtitle {
+      color: #8f8;
+      font-size: 1.1rem;
+      margin-bottom: 30px;
+    }
+    .hero {
+      background: #111a2b;
+      border: 1px solid #0a3;
+      padding: 30px;
+      border-radius: 8px;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .btn {
+      display: inline-block;
+      background: #0a3;
+      color: #fff;
+      padding: 14px 28px;
+      font-size: 1.15rem;
+      font-weight: bold;
+      text-decoration: none;
+      border-radius: 6px;
+      margin: 8px;
+      transition: all 0.2s;
+      border: 2px solid #0f0;
+    }
+    .btn:hover {
+      background: #0c4;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px #003300;
+    }
+    .btn.secondary {
+      background: #223;
+      border-color: #556;
+      color: #0ff;
+    }
+    .btn.secondary:hover { background: #334; }
+    .section {
+      background: #111a2b;
+      border: 1px solid #334;
+      padding: 20px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .note {
+      font-size: 0.9rem;
+      color: #ffdd44;
+      background: #2a2200;
+      padding: 10px 14px;
+      border-radius: 4px;
+      border-left: 4px solid #ff0;
+    }
+    code {
+      background: #1a2535;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: ui-monospace, monospace;
+    }
+    ul { padding-left: 20px; }
+    .footer {
+      text-align: center;
+      margin-top: 40px;
+      font-size: 0.85rem;
+      color: #667;
+    }
+    a { color: #0ff; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>ばとろわ</h1>
+    <div class="subtitle">Phaser 3 で作ってるサバイバル風ゲームの<strong>テスト/練習版</strong></div>
+
+    <div class="hero">
+      <p style="font-size:1.3rem; margin:10px 0 20px;">今すぐ遊べる練習モードを公開中</p>
+      <a href="test.html" class="btn">▶ テスト版をプレイする（おすすめ）</a>
+      <a href="map_editor.html" class="btn secondary">🗺 マップエディタを開く</a>
+      <a href="game.html" class="btn secondary">本格ゲーム版（開発中）</a>
+    </div>
+
+    <div class="section">
+      <h2 style="color:#0f0; margin-top:0;">テスト版の特徴</h2>
+      <ul>
+        <li>1920×1080 画面サイズで快適</li>
+        <li>中央に静止NPC 4体（HP違いでバランス確認しやすい）</li>
+        <li>上部に武器・防具を等間隔配置 → Spaceで拾って即切り替え</li>
+        <li><strong>F8</strong> でデバッグビジュアルフルオン（青視界扇・水色聴覚円・黄色足音・赤銃声円・状態テキスト）</li>
+        <li><strong>F9</strong> で即リスタート（デバッグ時）</li>
+        <li>音量調整UI付き（Master全体 + 自分の足音 / 自分の銃声だけ別調整）</li>
+        <li>ローカルサーバー必須で本物の音（walk.wav / shoot.wav）が鳴る</li>
+        <li>マウス視界コーン + 壁LOS + NPC索敵AI（音で反応）</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2 style="color:#0f0; margin-top:0;">主な操作</h2>
+      <div class="controls">
+        <div>WASD / 矢印：移動<br>マウス：視界方向</div>
+        <div>左クリック：射撃<br>Space：近くのアイテム拾得（自動拾いはなし）</div>
+        <div>F8：デバッグ表示トグル<br>F9：リスタート（デバッグON時）</div>
+        <div>画面上部の [-] [+]：音量調整<br>（自分の聞こえる足音・銃声・全体）</div>
+      </div>
+      <p class="note" style="margin-top:16px;">
+        <strong>重要</strong>：音を鳴らすには <strong>ローカルサーバー</strong> が必要です。<br>
+        直接 test.html をダブルクリック（file://）すると音が出なかったり固まったりします。
+      </p>
+    </div>
+
+    <div class="section">
+      <h2 style="color:#0f0; margin-top:0;">GitHub Pages で見る場合</h2>
+      <p>
+        このリポジトリを GitHub Pages で公開すると、同じリンクで遊べます。<br>
+        公開URL例：<code>https://あなたのユーザー名.github.io/リポジトリ名/test.html</code><br>
+        （index.html はこのランディングページになります）
+      </p>
+      <p>ローカルと同じく、音を聞くときは自分のPCでローカルサーバーを立てて開くのが確実です。</p>
+    </div>
+
+    <div class="section">
+      <h2 style="color:#0f0; margin-top:0;">ローカルで動かす方法（おすすめ）</h2>
+      <ol>
+        <li>このフォルダを任意の場所に置く</li>
+        <li>ターミナル / PowerShell でフォルダに移動</li>
+        <li>簡単なサーバーを起動（例）：
+          <ul>
+            <li><code>python -m http.server 8000</code></li>
+            <li>または VS Code の「Live Server」拡張</li>
+            <li>または <code>npx serve .</code></li>
+          </ul>
+        </li>
+        <li>ブラウザで <code>http://localhost:8000/test.html</code> を開く</li>
+      </ol>
+      <p class="note">file:// 直開きは避けてください（特に音周り）。</p>
+    </div>
+
+    <div class="footer">
+      ソースは js/ モジュール化されています（test.html は練習用にオーバーライド多め）。<br>
+      マップエディタで作ったマップは今後本番に反映予定。<br>
+      詳細は <a href="IMPLEMENTATION_STATUS.md">IMPLEMENTATION_STATUS.md</a> を参照。
+    </div>
+  </div>
+</body>
+</html>

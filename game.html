@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>batorowa - Phase 5.2 (Modular)</title>
+  <!-- Try local copy first for offline use, then CDN fallback -->
+  <script src="js/phaser.min.js"></script>
+  <script>
+    // If no local Phaser, load from CDN (requires internet)
+    if (typeof Phaser === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"><\/script>');
+    }
+  </script>
+  <style>
+    body { margin: 0; background: #000; overflow: hidden; }
+    canvas { display: block; margin: 0 auto; image-rendering: pixelated; }
+  </style>
+</head>
+<body style="margin: 0; background: #000; overflow: hidden;">
+  <!-- Module loading order is important -->
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/combat.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/npc.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

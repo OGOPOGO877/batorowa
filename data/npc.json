@@ -1,0 +1,27 @@
+{
+  "templates": {
+    "patrol": {
+      "scale": 1.5,
+      "patrolSpeed": 70,
+      "footstepInterval": 480,
+      "visionRange": 280,
+      "hearingRange": 520,
+      "fovAngle": 140,
+      "health": 3
+    }
+  },
+  "spawns": {
+    "open": [
+      {"x": 600, "y": 150},
+      {"x": 850, "y": 300},
+      {"x": 850, "y": 700},
+      {"x": 600, "y": 850},
+      {"x": 700, "y": 500}
+    ],
+    "cover": [
+      {"x": 220, "y": 500},
+      {"x": 720, "y": 220},
+      {"x": 380, "y": 780}
+    ]
+  }
+}

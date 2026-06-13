@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Batorowa Test / Practice Mode</title>
+  <script src="js/phaser.min.js"></script>
+  <style>
+    body { margin: 0; background: #000; overflow: hidden; }
+    canvas { display: block; margin: 0 auto; image-rendering: pixelated; }
+  </style>
+</head>
+<body>
+  <!-- Load modules (no main.js - custom test scene) -->
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/combat.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/npc.js"></script>
+  <script src="js/ui.js"></script>
+
+  <script>
+  (function() {
+    // Test mode overrides - 1920x1080 map as requested
+    window.CONFIG.MAP_WIDTH = 1920;
+    window.CONFIG.MAP_HEIGHT = 1080;
+    window.CONFIG.ZONE_INITIAL_RADIUS = 2000; // no real shrinking for test
+
+    // Data (same as main for compatibility)
+    // 武器バランス (テスト用・ここを編集すれば combat.js の getWeaponData 経由でダメージ等が反映される)
+    // 武器 | ダメージ | 弾速 | 連射間隔(ms) | 拡散 | ペレット | マガジン | リロード(ms)
+    window.WEAPONS_DATA = {
+      hg: {name:"ハンドガン", damage:5, bulletSpeed:280, fireRate:350, spread:0, pellets:1, magSize:12, reloadTime:1200},
+      pistol: {name:"ハンドガン", damage:5, bulletSpeed:280, fireRate:350, spread:0, pellets:1, magSize:12, reloadTime:1200},  // alias for compatibility
+      smg: {name:"SMG", damage:8, bulletSpeed:220, fireRate:120, spread:3, pellets:1, magSize:24, reloadTime:1400},
+      ar: {name:"AR", damage:10, bulletSpeed:320, fireRate:200, spread:1, pellets:1, magSize:20, reloadTime:1500},
+      sg: {name:"SG", damage:10, bulletSpeed:200, fireRate:600, spread:25, pellets:6, magSize:4, reloadTime:1800},
+      sr: {name:"SR", damage:60, bulletSpeed:450, fireRate:800, spread:0, pellets:1, magSize:2, reloadTime:2000}
+    };
+    window.EQUIPMENT_DATA = {
+      armor: {name:"アーマー", type:"armor", damageReduction:0.3},
+      helmet: {name:"ヘルメット", type:"helmet", headProtection:true},
+      goggles: {name:"ゴーグル", type:"goggles", visionMultiplier:1.4},
+      headset: {name:"ヘッドセット", type:"headset", hearingMultiplier:1.5}
+    };
+
+    let cursors, wasd, spaceKey;
+
+    function preload() {
+      this.load.image('player', 'https://labs.phaser.io/assets/sprites/phaser-dude.png');
+      this.load.image('npc', 'https://labs.phaser.io/assets/sprites/phaser-dude.png');
+
+      // Sounds and PNGs (user will place files here)
+      this.load.audio('walk', 'assets/sounds/walk.wav');
+      this.load.audio('shoot', 'assets/sounds/shoot.wav');
+
+      this.load.image('hg', 'assets/images/weapons/hg.png');
+      this.load.image('sg', 'assets/images/weapons/sg.png');
+      this.load.image('ar', 'assets/images/weapons/ar.png');
+      this.load.image('smg', 'assets/images/weapons/smg.png');
+      this.load.image('sr', 'assets/images/weapons/sr.png');
+
+      this.load.image('armor1', 'assets/images/armor/armor1.png');
+      this.load.image('armor2', 'assets/images/armor/armor2.png');
+      this.load.image('armor3', 'assets/images/armor/armor3.png');
+      this.load.image('goggles', 'assets/images/armor/goggles.png');
+
+      // Additional items to match main game spawns
+      this.load.image('headset', 'assets/images/weapons/headset.png');
+      this.load.image('medkit', 'assets/images/items/medkit.png');
+    }
+
+    function create() {
+      window.gameScene = this;
+
+      // World (minimal for test - obstacles for LOS if wanted)
+      const GW = window.GameWorld || {};
+      if (GW.createWorld) GW.createWorld(this);
+
+      // Large zone for test (no damage)
+      if (this.zone) {
+        this.zone.currentRadius = 5000;
+        if (GW.drawZone) GW.drawZone(this);
+      }
+
+      // For test: high player HP (default is 5)
+      if (window.CONFIG) {
+        window.CONFIG.PLAYER_MAX_HP = 100;
+      }
+
+      // Player
+      const GPc = window.GamePlayer || {};
+      if (GPc.createPlayer) GPc.createPlayer(this);
+      // Start position closer to center for easier testing of enemies and weapons
+      this.player.x = 700;
+      this.player.y = 700;
+
+      // 4 static enemies around center with different HP for balance testing
+      this.npcs = [];
+      const cx = 960;
+      const cy = 540;
+      const positions = [
+        {x: cx - 200, y: cy - 140}, // 100 HP
+        {x: cx + 200, y: cy - 140}, // 125 HP
+        {x: cx - 200, y: cy + 140}, // 150 HP
+        {x: cx + 200, y: cy + 140}  // 175 HP
+      ];
+      const hpValues = [100, 125, 150, 175];
+      positions.forEach((pos, index) => {
+        const npc = this.physics.add.sprite(pos.x, pos.y, 'npc');
+        npc.setScale(1.5);
+        npc.body.setCollideWorldBounds(true);
+        // Copy essential props from npc creation (patrolSpeed=0 for static)
+        npc.viewFailCount = 0;
+        npc.flashTimer = 0;
+        npc.patrolSpeed = 0; // static - no movement
+        npc.targetX = pos.x;
+        npc.targetY = pos.y;
+        npc.lastPatrolTime = 0;
+        npc.lastFootstepTime = 0;
+        npc.footstepInterval = 999999;
+        npc.detectedPlayer = false;
+        npc.alertLevel = 0;
+        npc.state = 'patrol';
+        npc.lastHeardGunshot = 0;
+        npc.facingAngle = 0;
+
+        // Variable HP for test
+        npc.hits = 0;
+        npc.maxHp = hpValues[index];
+
+        // Show remaining HP above head (max HP as requested, updated to show depletion)
+        const remaining = Math.max(0, npc.maxHp - npc.hits);
+        if (!npc.hpText) {
+          npc.hpText = this.add.text(pos.x, pos.y - 35, remaining.toString(), {
+            fontSize: '10px',
+            fill: '#ffff00',
+            backgroundColor: '#00000088',
+            padding: {x: 2, y: 1}
+          }).setDepth(1000).setOrigin(0.5, 1);
+        }
+
+        this.npcs.push(npc);
+      });
+      if (this.obstacles) {
+        this.physics.add.collider(this.npcs, this.obstacles);
+      }
+
+      // Weapons placed equally spaced around screen center (for weapon balance testing)
+      this.lootItems = [];
+      const centerX = 960;
+      const centerY = 540;
+      const spacing = 160;
+      const weaponLoot = [
+        {x: centerX - 2*spacing, y: centerY, type: 'weapon', key: 'hg'},
+        {x: centerX - spacing,   y: centerY, type: 'weapon', key: 'smg'},
+        {x: centerX,             y: centerY, type: 'weapon', key: 'ar'},
+        {x: centerX + spacing,   y: centerY, type: 'weapon', key: 'sg'},
+        {x: centerX + 2*spacing, y: centerY, type: 'weapon', key: 'sr'},
+      ];
+      weaponLoot.forEach(def => {
+        let itm;
+        if (this.textures.exists(def.key)) {
+          // Use PNG if loaded
+          itm = this.add.image(def.x, def.y, def.key).setDepth(30);
+        } else {
+          // Fallback to colored circle
+          itm = this.add.graphics({x: def.x, y: def.y}).setDepth(30);
+          itm.fillStyle(def.type === 'weapon' ? 0xffdd44 : (def.type === 'equipment' ? 0x66aaff : 0x66ff66), 1);
+          itm.fillCircle(0, 0, 10);
+        }
+        itm.setData('loot', def);
+        this.lootItems.push(itm);
+      });
+
+      // UI
+      const GUc = window.GameUI || {};
+      if (GUc.createUI) GUc.createUI(this);
+
+      // Make bottom-left UI bigger & cooler for this test version
+      // (bigger fonts, background panel, slight style upgrade)
+      // Raised 50px up as requested
+      if (this.ui) {
+        const u = this.ui;
+        // background panel for bottom left status area
+        const panel = this.add.graphics().setScrollFactor(0).setDepth(150);
+        panel.fillStyle(0x111a2e, 0.75);
+        panel.fillRoundedRect(6, 978, 240, 72, 4);
+        panel.lineStyle(2, 0x4466ff, 0.9);
+        panel.strokeRoundedRect(6, 978, 240, 72, 4);
+
+        if (u.hpText) {
+          u.hpText.setFontSize('22px').setColor('#ffffff').setPosition(14, 985);
+        }
+        if (u.weaponText) {
+          u.weaponText.setFontSize('18px').setPosition(14, 1008);
+        }
+        if (u.ammoText) {
+          u.ammoText.setFontSize('18px').setPosition(14, 1028);
+        }
+        if (u.equipText) {
+          u.equipText.setFontSize('16px').setPosition(14, 1046);
+        }
+      }
+
+      // Instruction text (updated for test features)
+      this.add.text(20, 20,
+        'TEST / PRACTICE MODE (1920x1080)\n' +
+        'WASD: move   |   Mouse: aim vision   |   LEFT CLICK: shoot\n' +
+        'Space (near item in range): pickup   << NO auto pickup anymore\n' +
+        'F8: toggle DEBUG viz (NPC blue vision fan, cyan hearing circle,\n' +
+        '     yellow footstep circles, red gunshot circles, state text on NPCs)\n' +
+        'F9: restart (debug only)\n' +
+        'Player HP:100 | 4 enemies around center (HP:100/125/150/175)\n' +
+        'Weapons placed equally around center | New weapon balance applied\n' +
+        'Yellow reticle = custom crosshair (original cursor hidden)\n' +
+        '音量: 下の[-][+]で Master(全体) / Self Foot(自分の足音) / Self Gun(自分の銃声) を調整\n' +
+        '      ※ 自分の聞こえる音だけ変わる。AIの索敵範囲や仮想音イベントは一切影響なし',
+        { fontSize: '13px', fill: '#0f0', backgroundColor: '#000000aa', padding: 4 }
+      ).setScrollFactor(0).setDepth(100);
+
+      // Hide system cursor for custom reticle (original cursor disappears when using reticle)
+      this.input.setDefaultCursor('none');
+      this.reticleGfx = this.add.graphics().setDepth(999);
+
+      // Camera
+      this.cameras.main.setBounds(0, 0, 1920, 1080);
+      this.cameras.main.startFollow(this.player, true, 0.9, 0.9);
+
+      // Inputs
+      cursors = this.input.keyboard.createCursorKeys();
+      wasd = this.input.keyboard.addKeys('W,A,S,D');
+      spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+      this.debugKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F8);
+      this.restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F9);
+      this.debugMode = false;
+      window.DEBUG = true; // start with debug ON for visualization
+      this.debugGraphics = this.add.graphics().setDepth(999);
+
+      // Player continuous footstep sound instance (for looping while moving)
+      this.playerFootstepSound = null;
+
+      // Timers
+      this.lastShotTime = 0;
+      this.lastFrameTime = 0;
+      this.lastPlayerFootstepTime = 0;
+
+      // Self sound volume controls (only affects sounds the player hears themselves)
+      // Does not change AI hearing range or virtual sound events
+      this.selfFootVol = 0.2;
+      this.selfGunVol = 0.6;
+      this.sound.volume = 0.5; // master volume for browser audio loudness
+
+      // Override emitGunshot for test: 
+      // - virtual (playReal=false) for AI/debug only (range / detection 100% unchanged)
+      // - + direct real 'shoot' playback using selfGunVol (only the volume *I* experience)
+      window.GameAudio.emitGunshot = function(x, y) {
+        if (window.GameAudio.emitSound) {
+          // playReal=false : virtual event only (AI detection range stays the same)
+          window.GameAudio.emitSound(x, y, 'gunshot', 1.0, 650, false);
+        }
+        // Self-heard real gunshot (full selfGunVol, no distance attenuation for own shot)
+        const sc = window.gameScene;
+        if (sc && sc.cache && sc.cache.audio && sc.cache.audio.exists('shoot')) {
+          try {
+            const gVol = (sc.selfGunVol != null ? sc.selfGunVol : 0.6);
+            sc.sound.play('shoot', { volume: gVol });
+          } catch (e) {
+            console.warn('Self gunshot SE play failed:', e.message);
+          }
+        }
+      };
+
+      console.log('[TEST] Practice mode initialized - static NPCs, loot row, debug viz ready');
+
+      // === Self volume adjustment UI (test only) ===
+      // Requested: 実際に聞こえる音(自分の足音+銃声)を下げたい。ブラウザ音がうるさい時用。
+      // Master: scene.sound.volume で全体を下げる
+      // Self Foot / Self Gun: 自分の実SE再生時のみに掛かるボリューム（仮想イベント/AI範囲は完全無変更）
+      const volYBase = 155;
+      this.add.text(20, volYBase, '音量調整 (自分の聞こえだけ / 範囲は変わりません)', {
+        fontSize: '11px', fill: '#ffdd44', backgroundColor: '#00000099', padding: 3
+      }).setScrollFactor(0).setDepth(100);
+
+      const makeVolCtrl = (name, propName, yOff) => {
+        const y = volYBase + 16 + yOff;
+        const label = this.add.text(20, y, name + ': --%', {
+          fontSize: '12px', fill: '#0ff', backgroundColor: '#00000088', padding: 2
+        }).setScrollFactor(0).setDepth(100);
+        const btnM = this.add.text(155, y, '[-]', {
+          fontSize: '12px', fill: '#fff', backgroundColor: '#333333', padding: { x: 5, y: 1 }
+        }).setScrollFactor(0).setDepth(100).setInteractive({ useHandCursor: true });
+        const btnP = this.add.text(182, y, '[+]', {
+          fontSize: '12px', fill: '#fff', backgroundColor: '#333333', padding: { x: 5, y: 1 }
+        }).setScrollFactor(0).setDepth(100).setInteractive({ useHandCursor: true });
+
+        const refresh = () => {
+          let v = 0;
+          if (propName === 'master') v = this.sound.volume || 0;
+          else if (propName === 'foot') v = this.selfFootVol || 0;
+          else if (propName === 'gun') v = this.selfGunVol || 0;
+          label.setText(name + ': ' + Math.round(v * 100) + '%');
+        };
+        refresh();
+
+        btnM.on('pointerdown', () => {
+          if (propName === 'master') this.sound.volume = Math.max(0, (this.sound.volume || 0) - 0.1);
+          else if (propName === 'foot') this.selfFootVol = Math.max(0, (this.selfFootVol || 0) - 0.1);
+          else if (propName === 'gun') this.selfGunVol = Math.max(0, (this.selfGunVol || 0) - 0.1);
+          refresh();
+        });
+        btnP.on('pointerdown', () => {
+          if (propName === 'master') this.sound.volume = Math.min(1, (this.sound.volume || 0) + 0.1);
+          else if (propName === 'foot') this.selfFootVol = Math.min(1, (this.selfFootVol || 0) + 0.1);
+          else if (propName === 'gun') this.selfGunVol = Math.min(1, (this.selfGunVol || 0) + 0.1);
+          refresh();
+        });
+        return { refresh };
+      };
+
+      this.volCtrls = [
+        makeVolCtrl('Master (全体)', 'master', 0),
+        makeVolCtrl('Self Foot (足音)', 'foot', 15),
+        makeVolCtrl('Self Gun (銃声)', 'gun', 30)
+      ];
+    }
+
+    function update(time) {
+      const scene = this;
+      if (!scene.player) return;
+
+      if (!this.lastFrameTime) this.lastFrameTime = time;
+      const delta = Math.min((time - this.lastFrameTime) / 1000, 0.05);
+      this.lastFrameTime = time;
+
+      const GP = window.GamePlayer || {};
+      if (GP.updatePlayerMovement) GP.updatePlayerMovement(scene, cursors, wasd, delta);
+      if (GP.updateMouseAngle) GP.updateMouseAngle(scene);
+      if (GP.updateVisionCone) GP.updateVisionCone(scene);
+      if (GP.updateNPCVisibility) GP.updateNPCVisibility(scene);
+
+      // Make self character bright and clearly visible (always, since it's the center of the player's own vision cone)
+      // Force full white tint + full alpha so it doesn't get dimmed by the dark vision overlay
+      if (scene.player) {
+        scene.player.setTint(0xffffff);
+        scene.player.setAlpha(1.0);
+        scene.player.setDepth(180); // above dark mask / overlay layers
+      }
+
+      const angle = GP.getMouseAngle ? GP.getMouseAngle() : 0;
+      const weapon = GP.getCurrentWeapon ? GP.getCurrentWeapon() : 'pistol';
+
+      // Shooting with ammo/reload - LEFT CLICK only (Space is now exclusively for pickup to avoid conflict)
+      // レートは window.WEAPONS_DATA (このファイルのテーブル) から取る。combat.js の getWeaponData もこれを優先するのでダメージ等も反映される
+      let weaponData = null;
+      if (window.WEAPONS_DATA && window.WEAPONS_DATA[weapon]) {
+        weaponData = window.WEAPONS_DATA[weapon];
+      } else if (window.GameCombat && window.GameCombat.getWeaponData) {
+        weaponData = window.GameCombat.getWeaponData(weapon);
+      }
+      const cooldown = weaponData ? weaponData.fireRate : window.CONFIG.SHOT_COOLDOWN;
+
+      const pointer = this.input.activePointer;
+      const leftClickShoot = pointer && pointer.leftButtonDown();
+      if (leftClickShoot && time - this.lastShotTime > cooldown) {
+        console.log('[test] shooting with weapon:', weapon, 'fireRate/cooldown:', cooldown, 'weaponData damage:', weaponData ? weaponData.damage : 'n/a');
+        let shouldFire = true;
+        if (GP.tryToFire) shouldFire = GP.tryToFire(weapon);
+        if (shouldFire) {
+          const GCbt = window.GameCombat || {};
+          if (GCbt.fireBullet && scene.player) {
+            this.lastShotTime = time;
+            GCbt.fireBullet(scene, angle, scene.player.x, scene.player.y, weapon);
+          }
+        }
+      }
+      if (GP.updateReload) GP.updateReload(scene, time);
+
+      // Player footstep SE (仕様準拠)
+      // ・移動中のみ
+      // ・停止したら再生しない（現在の音も停止）
+      // ・0.35秒ごとに1回試行（毎フレームではない）
+      // ・walk.wav 再生中なら重複再生しない
+      // ・移動継続中は ザッ (0.35s) ザッ (0.35s) ... のリズム
+      // 目的: ゲーム的な足音存在感（リアルループではなくSE連打表現）
+      if (scene.player) {
+        const pSpeed = Math.hypot(scene.player.body.velocity.x || 0, scene.player.body.velocity.y || 0);
+        const isMoving = pSpeed > 10;
+
+        if (isMoving) {
+          const FOOTSTEP_INTERVAL = 350; // 0.35秒
+
+          if (!this.lastPlayerFootstepTime || time - this.lastPlayerFootstepTime > FOOTSTEP_INTERVAL) {
+            // 試行タイミングを進める（リズムを固定）
+            this.lastPlayerFootstepTime = time;
+
+            // 仮想イベントは残す（F8デバッグの黄色円用。AIは拾わない設定のまま）
+            const GA = window.GameAudio || {};
+            if (GA.emitSound) {
+              GA.emitSound(scene.player.x, scene.player.y, 'footstep', 0.65, 190, false);
+            }
+
+            // 実SE: 再生中でなければ鳴らす（重複防止）
+            // Use selfFootVol (only affects what *I* hear). Does not affect virtual events or AI ranges.
+            const isAlreadyPlaying = !!(this.playerFootstepSound && this.playerFootstepSound.isPlaying);
+            if (!isAlreadyPlaying) {
+              try {
+                if (scene.cache.audio.exists('walk')) {
+                  const fVol = (scene.selfFootVol != null ? scene.selfFootVol : 0.2);
+                  this.playerFootstepSound = scene.sound.play('walk', {
+                    volume: fVol
+                    // loopなし、rateなし
+                  });
+                }
+              } catch (e) {
+                console.warn('Footstep SE play failed:', e.message);
+              }
+            }
+          }
+        } else {
+          // 停止中：新しい再生はせず、再生中なら止める
+          if (this.playerFootstepSound && this.playerFootstepSound.isPlaying) {
+            this.playerFootstepSound.stop();
+          }
+        }
+      }
+
+      // Simple custom reticle (crosshair) following mouse world pos
+      // Original cursor is hidden above. This replaces it with game-like reticle.
+      if (this.reticleGfx) {
+        this.reticleGfx.clear();
+        const p = this.input.activePointer;
+        const mx = (p.worldX !== undefined ? p.worldX : p.x);
+        const my = (p.worldY !== undefined ? p.worldY : p.y);
+        // outer circle
+        this.reticleGfx.lineStyle(2, 0xffff00, 0.85);
+        this.reticleGfx.strokeCircle(mx, my, 7);
+        // cross lines
+        this.reticleGfx.lineStyle(1, 0xffffff, 0.7);
+        this.reticleGfx.moveTo(mx - 14, my);
+        this.reticleGfx.lineTo(mx + 14, my);
+        this.reticleGfx.moveTo(mx, my - 14);
+        this.reticleGfx.lineTo(mx, my + 14);
+      }
+
+      // NPCs (will stay static due to patrolSpeed=0 + target=self)
+      const GN = window.GameNPC || {};
+      if (GN.updateNPCs) GN.updateNPCs(scene, time);
+      // Ensure no movement for test NPCs
+      scene.npcs.forEach(npc => {
+        if (npc && npc.body) npc.setVelocity(0, 0);
+        // update hp text to current remaining (for visibility of damage)
+        if (npc && npc.hpText) {
+          const remaining = Math.max(0, (npc.maxHp || 100) - (npc.hits || 0));
+          npc.hpText.setText(remaining.toString());
+        }
+      });
+
+      // Combat
+      const GC = window.GameCombat || {};
+      if (GC.updateBullets) GC.updateBullets(scene, delta, scene.npcs);
+      if (GC.updateHitEffects) GC.updateHitEffects();
+
+      // Audio
+      const GAu = window.GameAudio || {};
+      if (GAu.cleanupSounds) GAu.cleanupSounds();
+      if (GAu.updateSoundIndicators) GAu.updateSoundIndicators(scene, scene.player, scene.npcs);
+
+      // Looting - NEW: range + Space to pickup, NO auto on proximity
+      // Pickup range set, press Space when close to pick (nearest if multiple)
+      // If picking different weapon: drop current weapon on the ground at player pos
+      if (scene.lootItems && scene.player && window.GamePlayer && spaceKey && Phaser.Input.Keyboard.JustDown(spaceKey)) {
+        const PICKUP_RANGE = 60; // set acquisition range (adjustable)
+        let best = null;
+        let bestDist = Infinity;
+
+        for (let i = 0; i < scene.lootItems.length; i++) {
+          const it = scene.lootItems[i];
+          const d = Math.hypot(it.x - scene.player.x, it.y - scene.player.y);
+          if (d < PICKUP_RANGE && d < bestDist) {
+            bestDist = d;
+            best = { it: it, index: i, data: it.getData('loot') };
+          }
+        }
+
+        if (best && best.data) {
+          const ld = best.data;
+          const GP = window.GamePlayer;
+
+          if (ld.type === 'weapon' && GP.switchWeapon) {
+            const currentW = GP.getCurrentWeapon ? GP.getCurrentWeapon() : null;
+            // Drop current if different weapon (example: hg while having sg etc.)
+            if (currentW && currentW !== ld.key) {
+              const dropKey = currentW;  // now using short keys like 'hg' matching combat stats
+              const dropX = scene.player.x + (Math.random() - 0.5) * 18;
+              const dropY = scene.player.y + 18;
+              let dropped;
+              if (scene.textures.exists(dropKey)) {
+                dropped = scene.add.image(dropX, dropY, dropKey).setScale(0.55);
+              } else {
+                dropped = scene.add.graphics({ x: dropX, y: dropY }).setDepth(40);
+                dropped.fillStyle(0xffdd44, 1);
+                dropped.fillCircle(0, 0, 7);
+              }
+              dropped.setData('loot', { type: 'weapon', key: dropKey });
+              scene.lootItems.push(dropped);
+            }
+            GP.switchWeapon(ld.key);
+          } else if (ld.type === 'equipment' && GP.equipItem && window.EQUIPMENT_DATA) {
+            const ed = window.EQUIPMENT_DATA[ld.key];
+            if (ed) GP.equipItem(ed);
+          } else if (ld.type === 'item' && GP.pickupItem) {
+            GP.pickupItem(ld.key, { id: ld.key });
+          }
+
+          // remove picked item
+          best.it.destroy();
+          scene.lootItems.splice(best.index, 1);
+        }
+      }
+
+      // UI
+      const GU = window.GameUI || {};
+      if (GU.updateUI) GU.updateUI(scene);
+
+      // DEBUG visualization (F8 toggle) - full copy for test independence
+      if (window.DEBUG && this.debugGraphics && scene.npcs) {
+        this.debugGraphics.clear();
+
+        // Sound event circles
+        const GAA = window.GameAudio || {};
+        if (GAA.getRecentSoundsForDebug) {
+          GAA.getRecentSoundsForDebug().forEach(s => {
+            let c = (s.type === 'gunshot') ? 0xff0000 : 0xffff00;
+            this.debugGraphics.lineStyle(2, c, 0.6);
+            const r = s.radius || (s.type === 'gunshot' ? 650 : 380);
+            this.debugGraphics.strokeCircle(s.x, s.y, r);
+          });
+        }
+
+        // Per NPC debug
+        scene.npcs.forEach(npc => {
+          if (!npc || !npc.body) return;
+
+          // Blue vision fan
+          const vr = window.CONFIG.NPC_VISION_RANGE || 280;
+          const hf = Phaser.Math.DegToRad((window.CONFIG.NPC_FOV_ANGLE || 140) / 2);
+          let da = Math.atan2(npc.body.velocity.y || 0, npc.body.velocity.x || 0);
+          this.debugGraphics.fillStyle(0x0088ff, 0.25);
+          this.debugGraphics.slice(npc.x, npc.y, vr, da - hf, da + hf, false);
+          this.debugGraphics.fillPath();
+
+          // Cyan hearing circle
+          const hr = window.CONFIG.NPC_HEARING_RANGE || 520;
+          this.debugGraphics.lineStyle(2, 0x00ffff, 0.5);
+          this.debugGraphics.strokeCircle(npc.x, npc.y, hr);
+
+          // State text above
+          const st = (npc.state || 'patrol').toUpperCase();
+          if (!npc.debugStateText) {
+            npc.debugStateText = scene.add.text(npc.x, npc.y - 28, st, {
+              fontSize: '9px', fill: '#ffffff', backgroundColor: '#00000088', padding: {x: 2, y: 1}
+            }).setDepth(1000).setOrigin(0.5, 1);
+          }
+          npc.debugStateText.setText(st).setPosition(npc.x, npc.y - 28).setVisible(true);
+        });
+      } else if (scene.npcs) {
+        scene.npcs.forEach(n => { if (n && n.debugStateText) n.debugStateText.setVisible(false); });
+        if (this.debugGraphics) this.debugGraphics.clear();
+      }
+
+      // F8 debug toggle
+      if (this.debugKey && Phaser.Input.Keyboard.JustDown(this.debugKey)) {
+        this.debugMode = !this.debugMode;
+        window.DEBUG = this.debugMode;
+        console.log('[TEST] DEBUG mode:', window.DEBUG);
+        if (!window.DEBUG && this.debugGraphics) this.debugGraphics.clear();
+        if (scene.npcs) {
+          scene.npcs.forEach(n => { if (n && n.debugStateText) n.debugStateText.setVisible(!!window.DEBUG); });
+        }
+      }
+
+      // F9 restart (debug only)
+      if (this.debugMode && this.restartKey && Phaser.Input.Keyboard.JustDown(this.restartKey)) {
+        console.log('[TEST] Restarting...');
+        if (this.playerFootstepSound) {
+          this.playerFootstepSound.stop();
+          this.playerFootstepSound = null;
+        }
+        this.scene.restart();
+      }
+    }
+
+    const game = new Phaser.Game({
+      type: Phaser.AUTO,
+      width: 1920,
+      height: 1080,
+      backgroundColor: '#0f1626',
+      physics: { default: 'arcade', arcade: { debug: false } },
+      scene: { preload, create, update }
+    });
+  })();
+  </script>
+</body>
+</html>

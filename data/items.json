@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "id": "bandage",
+      "name": "包帯",
+      "type": "consumable",
+      "effect": "heal",
+      "amount": 1
+    },
+    {
+      "id": "medkit",
+      "name": "救急箱",
+      "type": "consumable",
+      "effect": "heal",
+      "amount": 3
+    },
+    {
+      "id": "adrenaline",
+      "name": "アドレナリン",
+      "type": "consumable",
+      "effect": "heal",
+      "amount": 2
+    }
+  ]
+}

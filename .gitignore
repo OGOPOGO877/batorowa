@@ -1,0 +1,23 @@
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs and temp
+*.log
+*.tmp
+
+# If using a local server with node
+node_modules/
+package-lock.json
+
+# Optional: don't commit very large unused assets
+# (uncomment if you add big videos etc.)
+# assets/videos/
