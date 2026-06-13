@@ -42,10 +42,10 @@ const sgStats = {
   name: "SG",
   damage: 10,
   bulletSpeed: 200,
-  fireRate: 600,
+  fireRate: 120,
   spread: 25,
-  pellets: 6,
-  magSize: 4,
+  pellets: 8,
+  magSize: 2,
   reloadTime: 1800
 };
 const srStats = {
